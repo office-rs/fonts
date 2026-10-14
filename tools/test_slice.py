@@ -14,29 +14,39 @@ REPO = Path(__file__).resolve().parent.parent
 CJK_START = 0x2E80  # must mirror slice.py: only CJK codepoints get sliced
 
 
-def run_slice(inp: str, key: str, extra: list[str] = []) -> dict:
+def run_slice(inp: str, key: str, extra: list[str] = []) -> tuple[Path, dict]:
+    """Run slice.py into a fresh temp dir; return (out_dir, parsed manifest)."""
     out = tempfile.mkdtemp()
     subprocess.run(
         [sys.executable, str(REPO / "tools/slice.py"), "--input", inp,
          "--key", key, "--out", out, "--block-size", "64", *extra],
         check=True,
     )
-    return json.loads((Path(out) / "manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((Path(out) / "manifest.json").read_text(encoding="utf-8"))
+    return Path(out), manifest
+
+
+def assert_woff2_magic(path: Path) -> None:
+    # Regression guard for the Task 5 lesson: TTFont.save() only applies the
+    # woff2 flavor when font.flavor is set on the font object — the manifest's
+    # format field alone would stay green while the bytes stay TTF/OTF.
+    assert path.read_bytes()[:4] == b"wOF2", f"not woff2 bytes: {path}"
 
 
 def test_small_font_slices():
     # NotoSans is the Latin family: ships whole (no slices), converted to woff2.
-    m = run_slice(str(REPO / "sources/NotoSans-Regular.ttf"), "notosans",
-                  ["--is-latin"])
+    out, m = run_slice(str(REPO / "sources/NotoSans-Regular.ttf"), "notosans",
+                       ["--is-latin"])
     fam = m["families"]["notosans"]
     assert fam["displayName"]
     assert fam["whole"]["format"] == "woff2"
     assert fam["whole"]["bytes"] > 0
     assert "slices" not in fam and "full" not in fam
+    assert_woff2_magic(out / "notosans" / "regular.woff2")
 
 
 def test_cjk_layout_common_then_blocks():
-    m = run_slice(
+    out, m = run_slice(
         str(REPO / "sources/NotoSansCJKsc-Regular.otf"), "notosanscjksc",
         ["--freq", str(REPO / "tools/freq/junda.txt"),
          "--common-count", "2", "--common-per-slice", "500",
@@ -59,3 +69,7 @@ def test_cjk_layout_common_then_blocks():
     src = TTFont(REPO / "sources/NotoSansCJKsc-Regular.otf")
     src_cps = set(src.getBestCmap().keys())
     assert seen == {cp for cp in src_cps if cp >= CJK_START}
+    # every artifact class (common, block, full) is genuinely woff2 bytes
+    assert_woff2_magic(out / commons[0]["url"])
+    assert_woff2_magic(out / blocks[0]["url"])
+    assert_woff2_magic(out / fam["full"]["url"])
