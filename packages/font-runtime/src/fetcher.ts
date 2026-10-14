@@ -22,9 +22,14 @@ export async function serveJobs(jobs: FetchJob[], fetchBytes: (url: string) => P
 
 export interface Fetcher { fetchBatch(jobs: FetchJob[]): Promise<FetchResult[]> }
 
+/**
+ * Worker-backed Fetcher (fetch + sha256 + woff2 decode off the main thread).
+ * Serialization contract: callers must not overlap fetchBatch calls —
+ * runEnsure awaits each batch before issuing the next, and the single
+ * onmessage slot assumes exactly one outstanding batch.
+ */
 class WorkerFetcher implements Fetcher {
   private worker: Worker | null = null;
-  private pending = new Map<string, Promise<FetchResult[]>>();
   fetchBatch(jobs: FetchJob[]): Promise<FetchResult[]> {
     // One postMessage round per batch; failure to construct Worker falls back.
     if (!this.worker) {
@@ -37,6 +42,15 @@ class WorkerFetcher implements Fetcher {
     }
     const w = this.worker;
     return new Promise((resolve) => {
+      // Construction can succeed while loading fails later (404 on the script,
+      // module resolution error, crash before the first postMessage): onmessage
+      // then never fires, so onerror must settle the pending batch via the
+      // main-thread fallback instead of leaving it — and runEnsure — hanging.
+      w.onerror = () => {
+        this.worker = null;
+        w.terminate();
+        resolve(this.mainThread(jobs));
+      };
       w.onmessage = (ev: MessageEvent<{ results: FetchResult[] }>) => { resolve(ev.data.results); };
       w.postMessage({ jobs });
     });
