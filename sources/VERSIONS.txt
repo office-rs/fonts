@@ -1,0 +1,3 @@
+NotoSans-Regular.ttf Version 2.015; ttfautohint (v1.8.4.7-5d5b)
+NotoSansCJKsc-Regular.otf Version 2.004;hotconv 1.0.118;makeotfexe 2.5.65603
+NotoSerifCJKsc-Regular.otf Version 2.003;hotconv 1.1.1;makeotfexe 2.6.0
