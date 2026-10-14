@@ -89,6 +89,36 @@ describe('runEnsure', () => {
     for await (const s of runEnsure(manifest2, plan2, state, fetcher, { maxConcurrency: 2 })) { got.push(s); }
     expect(got.map((g) => g.id)).toEqual(['s1']);
   });
+  it('whole-plan family yields the whole file bytes once and dedups on second run', async () => {
+    const shaOf = (s: string) => createHash('sha256').update(s).digest('hex');
+    const wholeManifest = parseManifest({ version: 1, generated: '', families: { f: { displayName: 'F',
+      whole: { url: 'w0', format: 'otf', sha256: shaOf('WHOLE'), bytes: 5 } } } });
+    const wholePlan = { families: [{ family: 'f', load: 'whole' as const, sliceIds: [] }] };
+    const state = createEnsureState();
+    const fetcher = makeFetcher({ w0: 'WHOLE' });
+    const got = [];
+    for await (const s of runEnsure(wholeManifest, wholePlan, state, fetcher, { maxConcurrency: 6 })) { got.push(s); }
+    expect(got.map((g) => [g.family, g.id, Buffer.from(g.bytes).toString()])).toEqual([['f', '__whole__', 'WHOLE']]);
+    // Second run over the same state dedups — no refetch.
+    const spy = vi.spyOn(fetcher, 'fetchBatch');
+    for await (const _ of runEnsure(wholeManifest, wholePlan, state, fetcher, { maxConcurrency: 6 })) { /* drain */ }
+    expect(spy).not.toHaveBeenCalled();
+  });
+  it('full-plan family yields the full file bytes once and dedups on second run', async () => {
+    const shaOf = (s: string) => createHash('sha256').update(s).digest('hex');
+    const fullManifest = parseManifest({ version: 1, generated: '', families: { f: { displayName: 'F',
+      full: { url: 'fl0', format: 'otf', sha256: shaOf('FULL'), bytes: 4 } } } });
+    const fullPlan = { families: [{ family: 'f', load: 'full' as const, sliceIds: [] }] };
+    const state = createEnsureState();
+    const fetcher = makeFetcher({ fl0: 'FULL' });
+    const got = [];
+    for await (const s of runEnsure(fullManifest, fullPlan, state, fetcher, { maxConcurrency: 6 })) { got.push(s); }
+    expect(got.map((g) => [g.family, g.id, Buffer.from(g.bytes).toString()])).toEqual([['f', '__full__', 'FULL']]);
+    // Second run over the same state dedups — no refetch.
+    const spy = vi.spyOn(fetcher, 'fetchBatch');
+    for await (const _ of runEnsure(fullManifest, fullPlan, state, fetcher, { maxConcurrency: 6 })) { /* drain */ }
+    expect(spy).not.toHaveBeenCalled();
+  });
   it('bounds fetch concurrency to maxConcurrency', async () => {
     const shaOf = (s: string) => createHash('sha256').update(s).digest('hex');
     const slices = [0, 1, 2, 3, 4].map((i) => ({ id: `s${i}`, kind: 'block' as const, url: `u${i}`, format: 'otf' as const,

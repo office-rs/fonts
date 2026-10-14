@@ -1,5 +1,6 @@
-// Ensure pipeline: fetch planned slices with dedup, bounded concurrency,
-// a sha256 integrity gate, and a single retry before marking a slice failed.
+// Ensure pipeline: fetch planned slices (plus whole-/full-file family refs under
+// pseudo ids) with dedup, bounded concurrency, a sha256 integrity gate, and a
+// single retry before marking a slice failed.
 
 import type { FontManifest, FontSliceRef } from './manifest';
 import type { FontSlicePlan } from './select';
@@ -9,6 +10,12 @@ import { FontLoadError } from './errors';
 export interface EnsureState { loaded: Set<string>; failed: Set<string>; inflight: Set<string>; }
 
 export function createEnsureState(): EnsureState { return { loaded: new Set(), failed: new Set(), inflight: new Set() }; }
+
+// Pseudo slice ids for whole-file / full-file family plans: whole/full refs are
+// FontFileRefs (no id of their own), but they ride the same slice pipeline —
+// dedup keys, yields, and error reports carry these ids.
+export const WHOLE_SLICE_ID = '__whole__';
+export const FULL_SLICE_ID = '__full__';
 
 export async function* runEnsure(
   manifest: FontManifest, plan: FontSlicePlan, state: EnsureState, fetcher: Fetcher,
@@ -22,9 +29,13 @@ export async function* runEnsure(
     const fam = manifest.families[fp.family];
     if (!fam) { continue; }
     const refs: FontSliceRef[] =
-      fp.load === 'full' ? [] :
-      fp.load === 'whole' ? [] :
-      (fam.slices ?? []).filter((s) => fp.sliceIds.includes(s.id));
+      fp.load === 'whole' && fam.whole
+        ? [{ ...fam.whole, id: WHOLE_SLICE_ID, kind: 'common', codepoints: [] }]
+      : fp.load === 'full' && fam.full
+        ? [{ ...fam.full, id: FULL_SLICE_ID, kind: 'common', codepoints: [] }]
+      : fp.load === 'slices'
+        ? (fam.slices ?? []).filter((s) => fp.sliceIds.includes(s.id))
+        : [];
     for (const slice of refs) {
       const key = `${fp.family}/${slice.id}`;
       if (state.loaded.has(key) || state.failed.has(key) || state.inflight.has(key)) { continue; }

@@ -52,6 +52,25 @@ describe('FontRuntime', () => {
     const second = rt.watchText([19968, 19969]);   // both covered now
     expect(second.families).toEqual([]);
   });
+  it('whole-only family: selectInitial plans whole, ensure loads it, watchText stops planning it', async () => {
+    const s = await sha('whole-bytes');
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url.endsWith('.json')) {
+        return new Response(JSON.stringify({ version: 1, generated: '', families: { wf: { displayName: 'WholeF',
+          whole: { url: 'wf/whole.otf', format: 'otf', sha256: s, bytes: 11 } } } }),
+          { headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('whole-bytes');
+    }));
+    const rt = new FontRuntime({ manifests: ['http://x/m.json'], includeDefaultNoto: false });
+    await rt.ready();
+    const plan = rt.selectInitial([65], ['WholeF']);
+    expect(plan.families).toEqual([{ family: 'wf', load: 'whole', sliceIds: [] }]);
+    const got: Array<[string, string]> = [];
+    for await (const sl of rt.ensure(plan)) { got.push([sl.family, sl.id]); }
+    expect(got).toEqual([['wf', '__whole__']]);
+    expect(rt.watchText([65])).toEqual({ families: [] });
+  });
   it('slice fetch error surfaces via onFontError', async () => {
     const s = await sha('slice-bytes');            // manifest sha of 'slice-bytes', but the slice URL serves 'garbage'
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {

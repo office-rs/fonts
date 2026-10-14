@@ -1,7 +1,7 @@
 // FontRuntime facade: manifest merge + selection + ensure + typing watcher (spec section 7).
 import { mergeManifests, parseManifest, type FontManifest, type FontSliceRef } from './manifest';
 import { selectInitial, type FontSlicePlan } from './select';
-import { createEnsureState, runEnsure, type EnsureState } from './ensure';
+import { createEnsureState, runEnsure, FULL_SLICE_ID, WHOLE_SLICE_ID, type EnsureState } from './ensure';
 import { createFetcher, type Fetcher } from './fetcher';
 import { FontLoadError } from './errors';
 import { IntervalSet } from './coverage';
@@ -57,8 +57,14 @@ export class FontRuntime {
       maxConcurrency: this.opts.maxConcurrency ?? 6,
       onError: (e) => this.opts.onFontError?.(e),
     })) {
-      const ref = m.families[s.family]?.slices?.find((r) => r.id === s.id);
-      if (ref) { this.markCovered(s.family, [ref]); }   // before yield, or watchText never converges
+      // A whole/full file covers every slice the manifest offers for the
+      // family — mark them all so watchText never re-plans it.
+      if (s.id === WHOLE_SLICE_ID || s.id === FULL_SLICE_ID) {
+        this.markCovered(s.family, m.families[s.family]?.slices ?? []);
+      } else {
+        const ref = m.families[s.family]?.slices?.find((r) => r.id === s.id);
+        if (ref) { this.markCovered(s.family, [ref]); }   // before yield, or watchText never converges
+      }
       yield s;
     }
   }
