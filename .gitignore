@@ -2,3 +2,5 @@ node_modules/
 dist/**/*.js.map
 *.tsbuildinfo
 __pycache__/
+examples/vite/dist/
+examples/vite/package-lock.json
