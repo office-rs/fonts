@@ -1,12 +1,12 @@
 // FontRuntime facade: manifest merge + selection + ensure + typing watcher (spec section 7).
-import { mergeManifests, parseManifest, type FontManifest, type FontSliceRef } from './manifest';
+import { mergeManifests, parseManifest, type FontManifest, type FontFamily, type FontFileRef, type FontSliceRef } from './manifest';
 import { selectInitial, type FontSlicePlan } from './select';
 import { createEnsureState, runEnsure, FULL_SLICE_ID, WHOLE_SLICE_ID, type EnsureState } from './ensure';
 import { createFetcher, type Fetcher } from './fetcher';
 import { FontLoadError } from './errors';
 import { IntervalSet } from './coverage';
 
-export const DEFAULT_NOTO_MANIFEST_URL = 'https://cdn.jsdelivr.net/gh/office-rs/fonts@v1/dist/manifest.json';
+export const DEFAULT_NOTO_MANIFEST_URL = 'https://cdn.jsdelivr.net/gh/office-rs/fonts@v1/dist/v1/manifest.json';
 
 export interface FontRuntimeOptions {
   manifests: string[];
@@ -16,6 +16,27 @@ export interface FontRuntimeOptions {
   onFontError?: (err: FontLoadError) => void;
 }
 export interface FontSlice { family: string; id: string; bytes: Uint8Array; }
+
+/**
+ * Spec 6.7: every url inside a manifest is relative to the manifest's own
+ * location. Rewrite all refs (whole/full/slices) to absolute urls against the
+ * url the manifest was fetched from, so downstream fetchers never resolve a
+ * bare relative url against the document base. parseManifest guarantees every
+ * ref url is relative, so this is always a plain path join. Returns new
+ * objects — the parsed manifest is never mutated.
+ */
+function resolveManifestUrls(m: FontManifest, manifestUrl: string): FontManifest {
+  const abs = (u: string): string => new URL(u, manifestUrl).href;
+  const file = <T extends FontFileRef>(r: T): T => ({ ...r, url: abs(r.url) });
+  const families = Object.fromEntries(Object.entries(m.families).map(([key, fam]): [string, FontFamily] => {
+    const out: FontFamily = { displayName: fam.displayName };
+    if (fam.whole) { out.whole = file(fam.whole); }
+    if (fam.full) { out.full = file(fam.full); }
+    if (fam.slices) { out.slices = fam.slices.map(file); }
+    return [key, out];
+  }));
+  return { ...m, families };
+}
 
 export class FontRuntime {
   private merged: FontManifest | null = null;
@@ -35,7 +56,7 @@ export class FontRuntime {
     for (const url of urls) {
       const res = await fetch(url);
       if (!res.ok) { throw new FontLoadError('', '', `manifest fetch failed: ${url}`); }
-      manifests.push(parseManifest(await res.json()));
+      manifests.push(resolveManifestUrls(parseManifest(await res.json()), url));
     }
     this.merged = mergeManifests(manifests);
     for (const key of Object.keys(this.merged.families)) {

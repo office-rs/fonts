@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createEnsureState, runEnsure } from '../src/ensure';
-import type { Fetcher, FetchJob, FetchResult } from '../src/fetcher';
+import { serveJobs, type Fetcher, type FetchJob, type FetchResult } from '../src/fetcher';
 import type { FontLoadError } from '../src/errors';
 import { parseManifest } from '../src/manifest';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 // Build a manifest whose single slice's sha256 matches the literal bytes "ABC".
 const sha = createHash('sha256').update('ABC').digest('hex');
@@ -56,9 +57,13 @@ describe('runEnsure', () => {
     for await (const _ of runEnsure(manifest, plan, state, errFetcher, { maxConcurrency: 6 })) { /* drain */ }
     expect(spy).not.toHaveBeenCalled();
   });
-  it('sha256 mismatch is a failure', async () => {
+  it('sha256 mismatch reported by the fetcher is a failure (single hash gate)', async () => {
+    // Contract-faithful fake: the REAL fetcher (serveJobs) is the single hash
+    // gate — it verifies sha256 on the RAW bytes before decode and reports a
+    // mismatch as {ok:false}. runEnsure must not re-hash (r.bytes are decoded
+    // TTF, whose digest never matches the woff2-file sha in the manifest).
     const state = createEnsureState();
-    const fetcher = makeFetcher({ u0: 'XXX' });
+    const fetcher = makeFetcher({ u0: new Error('sha256 mismatch: u0') });
     const errors: FontLoadError[] = [];
     const got = [];
     for await (const s of runEnsure(manifest, plan, state, fetcher, { maxConcurrency: 6, onError: (e) => errors.push(e) })) { got.push(s); }
@@ -70,6 +75,26 @@ describe('runEnsure', () => {
     const spy = vi.spyOn(fetcher, 'fetchBatch');
     for await (const _ of runEnsure(manifest, plan, state, fetcher, { maxConcurrency: 6 })) { /* drain */ }
     expect(spy).not.toHaveBeenCalled();
+  });
+  it('woff2 slice end-to-end: real serveJobs gate yields DECODED ttf bytes', async () => {
+    // Manifest sha256 hashes the woff2 FILE (serveJobs checks it on raw bytes
+    // pre-decode); the slice must still yield with the decoded TTF payload.
+    const woff2 = new Uint8Array(readFileSync('test-data/abc.woff2'));
+    const shaWoff2 = createHash('sha256').update(woff2).digest('hex');
+    const woff2Manifest = parseManifest({ version: 1, generated: '', families: { f: { displayName: 'F',
+      slices: [{ id: 's0', kind: 'block', url: 'f/s0.woff2', format: 'woff2', sha256: shaWoff2, bytes: woff2.length, codepoints: [[1, 2]] }] } } });
+    const woff2Plan = { families: [{ family: 'f', load: 'slices' as const, sliceIds: ['s0'] }] };
+    const errors: FontLoadError[] = [];
+    const fetcher: Fetcher = {
+      // The REAL serveJobs as the Fetcher: inject only the byte source (disk).
+      fetchBatch: (jobs) => serveJobs(jobs, async (url) => { expect(url).toBe('f/s0.woff2'); return woff2.slice(); }),
+    };
+    const got = [];
+    for await (const s of runEnsure(woff2Manifest, woff2Plan, createEnsureState(), fetcher, { maxConcurrency: 6, onError: (e) => errors.push(e) })) { got.push(s); }
+    expect(errors).toEqual([]);
+    expect(got.length).toBe(1);
+    expect(got[0].id).toBe('s0');
+    expect(Array.from(got[0].bytes.slice(0, 4))).toEqual([0x00, 0x01, 0x00, 0x00]);   // decoded sfnt magic
   });
   it('sweeps inflight keys when the consumer breaks out early', async () => {
     const shaOf = (s: string) => createHash('sha256').update(s).digest('hex');

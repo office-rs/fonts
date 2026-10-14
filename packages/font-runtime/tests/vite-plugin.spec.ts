@@ -3,6 +3,8 @@
 // The fixture package (tests/fixtures/fonts-fixture) is copied into the workspace
 // node_modules in beforeAll so the plugin's `@office-rs/fonts-fixture` resolution
 // works exactly like a real host consuming the published asset packages (no alias).
+// Fixture payloads are REAL woff2 files (abc.woff2 / notosans regular.woff2) so the
+// runtime's decode path works against them end-to-end (see tests/integration.spec.ts).
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { build, createServer } from 'vite';
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -62,7 +64,8 @@ describe('rwordFonts vite plugin', () => {
     expect(existsSync(join(out, 'rword-fonts/ff/blk-0000.woff2'))).toBe(true);
     expect(existsSync(join(out, 'rword-fonts/ff/full.woff2'))).toBe(true);   // full slot is emitted too
     expect(existsSync(join(out, 'sub/rword-fonts/ff/common-0.woff2'))).toBe(false);
-    expect(readFileSync(join(out, 'rword-fonts/ff/common-0.woff2'), 'utf8')).toBe('fake-common-0');
+    // Emitted slice bytes are the fixture payload verbatim (a real woff2 file).
+    expect(readFileSync(join(out, 'rword-fonts/ff/common-0.woff2')).equals(readFileSync(join(fixtureSrc, 'dist/ff/common-0.woff2')))).toBe(true);
 
     // The merged manifest keeps PACKAGE-RELATIVE urls: the runtime resolves them
     // against the manifest's own URL (base + rword-fonts/manifest.json), which
@@ -100,7 +103,8 @@ describe('rwordFonts vite plugin', () => {
       const slice = await fetch(`${origin}/sub/@rword-fonts/ff/common-0.woff2`);
       expect(slice.status).toBe(200);
       expect(slice.headers.get('content-type')).toContain('font/woff2');
-      expect(await slice.text()).toBe('fake-common-0');
+      // Served bytes are the fixture payload verbatim (a real woff2 file).
+      expect(Buffer.from(await slice.arrayBuffer()).equals(readFileSync(join(fixtureSrc, 'dist/ff/common-0.woff2')))).toBe(true);
 
       const manifest = await fetch(`${origin}/sub/@rword-fonts/manifest.json`);
       expect(manifest.status).toBe(200);

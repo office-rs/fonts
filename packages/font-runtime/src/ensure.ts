@@ -1,6 +1,9 @@
 // Ensure pipeline: fetch planned slices (plus whole-/full-file family refs under
-// pseudo ids) with dedup, bounded concurrency, a sha256 integrity gate, and a
-// single retry before marking a slice failed.
+// pseudo ids) with dedup, bounded concurrency, and a single retry before marking
+// a slice failed. Integrity is the fetcher's contract: serveJobs verifies
+// sha256 on the RAW bytes before decoding, so r.ok === true already means the
+// hash matched — re-hashing here would compare decoded TTF bytes against the
+// woff2-file digest and reject every woff2 slice by construction.
 
 import type { FontManifest, FontSliceRef } from './manifest';
 import type { FontSlicePlan } from './select';
@@ -53,16 +56,19 @@ export async function* runEnsure(
         const results = await fetcher.fetchBatch(batch.map((j) => ({ url: j.slice.url, sha256: j.slice.sha256, format: j.slice.format })));
         for (const r of results) {
           const j = batch.find((b) => b.slice.url === r.url)!;
-          if (r.ok && await sha256Hex(r.bytes) === j.slice.sha256) {
+          // Single hash gate: the fetcher already verified sha256 on raw bytes
+          // (serveJobs) — success here is r.ok alone, and r.bytes are DECODED.
+          if (r.ok) {
             state.loaded.add(j.key); state.inflight.delete(j.key);
             yield { family: j.family, id: j.slice.id, bytes: r.bytes };
           } else if (pass === 0 && !j.retry) {
             jobs.push({ ...j, retry: true });   // one retry (spec 9)
           } else {
             // Final failure: mark failed, report via onError, keep going — one bad
-            // slice must not abort the other slices (spec 9).
+            // slice must not abort the other slices (spec 9). The fetcher's
+            // error string carries the cause (network vs sha256 mismatch).
             state.inflight.delete(j.key); state.failed.add(j.key);
-            if (opts.onError) { opts.onError(new FontLoadError(j.family, j.slice.id, `slice fetch/hash failed: ${r.ok ? 'sha256' : 'network'}`)); }
+            if (opts.onError) { opts.onError(new FontLoadError(j.family, j.slice.id, `slice fetch failed: ${r.error}`)); }
           }
         }
       }
@@ -74,9 +80,4 @@ export async function* runEnsure(
     // resurrected.
     for (const key of thisRunKeys) { state.inflight.delete(key); }
   }
-}
-
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes as unknown as ArrayBuffer);
-  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }

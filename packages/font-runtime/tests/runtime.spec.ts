@@ -15,6 +15,12 @@ function manifestJson(displayName: string, key: string, sha256: string) {
 }
 
 describe('FontRuntime', () => {
+  it('DEFAULT_NOTO_MANIFEST_URL points at the published dist/v1 layout', () => {
+    // Tripwire: the repo publishes the CDN manifest at dist/v1/manifest.json
+    // (see tools/make-packages.mjs / dist/v1); a wrong path 404s every default
+    // integration at runtime while looking fine locally.
+    expect(DEFAULT_NOTO_MANIFEST_URL).toBe('https://cdn.jsdelivr.net/gh/office-rs/fonts@v1/dist/v1/manifest.json');
+  });
   it('ready() merges default Noto manifest with user manifests', async () => {
     const s = await sha('slice-bytes');
     // Default URL serves the Noto family; user manifests serve their own family —
@@ -70,6 +76,31 @@ describe('FontRuntime', () => {
     for await (const sl of rt.ensure(plan)) { got.push([sl.family, sl.id]); }
     expect(got).toEqual([['wf', '__whole__']]);
     expect(rt.watchText([65])).toEqual({ families: [] });
+  });
+  it('ready() resolves manifest urls against the manifest\'s own location (spec 6.7)', async () => {
+    const s = await sha('slice-bytes');
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      seen.push(url);
+      if (url.endsWith('.json')) {
+        return new Response(JSON.stringify({ version: 1, generated: '', families: { f: { displayName: 'F',
+          whole: { url: 'w/whole.otf', format: 'otf', sha256: s, bytes: 11 },
+          slices: [{ id: 'common-0', kind: 'common', preload: true, url: 'f/common-0.otf', format: 'otf',
+                     sha256: s, bytes: 9, codepoints: [[19968, 19990]] }] } } }),
+          { headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('slice-bytes');
+    }));
+    const rt = new FontRuntime({ manifests: ['http://x/fonts/manifest.json'], includeDefaultNoto: false });
+    const m = await rt.ready();
+    // Every ref url (whole + slices) is rewritten against the manifest's own url.
+    expect(m.families.f.slices![0].url).toBe('http://x/fonts/f/common-0.otf');
+    expect(m.families.f.whole!.url).toBe('http://x/fonts/w/whole.otf');
+    // The resolved absolute url is what the slice pipeline actually fetches —
+    // a bare relative url would be resolved against the document base instead.
+    for await (const _ of rt.ensure(rt.watchText([19968]))) { /* drain */ }
+    expect(seen).toContain('http://x/fonts/f/common-0.otf');
+    expect(seen).not.toContain('f/common-0.otf');
   });
   it('slice fetch error surfaces via onFontError', async () => {
     const s = await sha('slice-bytes');            // manifest sha of 'slice-bytes', but the slice URL serves 'garbage'

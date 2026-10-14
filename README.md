@@ -35,7 +35,7 @@ Manifest URLs are pinned to a major-version git tag (`v1`); upstream Noto
 upgrades re-slice under a new tag, old tags stay reproducible forever:
 
 ```
-https://cdn.jsdelivr.net/gh/office-rs/fonts@v1/dist/manifest.json
+https://cdn.jsdelivr.net/gh/office-rs/fonts@v1/dist/v1/manifest.json
 ```
 
 `FontRuntime` includes this manifest by default (`includeDefaultNoto: true`),
