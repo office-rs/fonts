@@ -11,6 +11,18 @@ export interface FontManifest { version: 1; generated: string; families: Record<
 
 const SHA256_RE = /^[0-9a-f]{64}$/;
 
+// Sentinel base for relative-url resolution: manifest urls are relative to the
+// manifest's own directory, so any resolution to a different origin (scheme-bearing,
+// protocol-relative, or opaque like data:) escapes the contract and is rejected.
+const MANIFEST_BASE = 'http://manifest.invalid';
+
+function isRelativeUrl(u: string): boolean {
+  if (u === '') { return false; }
+  let resolved: URL;
+  try { resolved = new URL(u, MANIFEST_BASE); } catch { return false; }
+  return resolved.origin === MANIFEST_BASE;
+}
+
 function fail(msg: string): never { throw new Error(`manifest: ${msg}`); }
 
 export function parseManifest(json: unknown): FontManifest {
@@ -28,7 +40,8 @@ export function parseManifest(json: unknown): FontManifest {
     for (const slot of ['full', 'whole'] as const) {
       const ref = f[slot] as Record<string, unknown> | undefined;
       if (ref === undefined) { continue; }
-      if (typeof ref.url !== 'string' || !isValidFormat(ref.format) || !SHA256_RE.test(String(ref.sha256))) {
+      if (typeof ref.url !== 'string' || !isRelativeUrl(ref.url)) { fail(`families.${key}.${slot} url must be a non-empty relative path`); }
+      if (!isValidFormat(ref.format) || !SHA256_RE.test(String(ref.sha256))) {
         fail(`families.${key}.${slot}`);
       }
       family[slot] = { url: ref.url as string, format: ref.format as SliceFormat, sha256: ref.sha256 as string, bytes: ref.bytes as number };
@@ -36,7 +49,8 @@ export function parseManifest(json: unknown): FontManifest {
     if (Array.isArray(f.slices)) {
       family.slices = (f.slices as Record<string, unknown>[]).map((s, i) => {
         if (typeof s.id !== 'string' || (s.kind !== 'common' && s.kind !== 'block')) { fail(`families.${key}.slices[${i}]`); }
-        if (typeof s.url !== 'string' || !isValidFormat(s.format) || !SHA256_RE.test(String(s.sha256))) { fail(`families.${key}.slices[${i}]`); }
+        if (typeof s.url !== 'string' || !isRelativeUrl(s.url)) { fail(`families.${key}.slices[${i}] url must be a non-empty relative path`); }
+        if (!isValidFormat(s.format) || !SHA256_RE.test(String(s.sha256))) { fail(`families.${key}.slices[${i}]`); }
         const cps = s.codepoints as [number, number][];
         if (!Array.isArray(cps) || cps.some(([lo, hi]) => !Number.isInteger(lo) || !Number.isInteger(hi) || lo > hi || lo < 0)) {
           fail(`families.${key}.slices[${i}].codepoint range`);

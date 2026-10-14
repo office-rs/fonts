@@ -24,6 +24,16 @@ describe('parseManifest', () => {
     bad.families.notosanscjksc.slices![0].codepoints = [[200, 100]];
     expect(() => parseManifest(bad)).toThrow(/codepoint/);
   });
+  it('rejects empty url', () => {
+    const bad = structuredClone(ok);
+    bad.families.notosanscjksc.slices![0].url = '';
+    expect(() => parseManifest(bad)).toThrow(/url/);
+  });
+  it('rejects absolute url', () => {
+    const bad = structuredClone(ok);
+    bad.families.notosanscjksc.slices![0].url = 'https://evil.example/x.woff2';
+    expect(() => parseManifest(bad)).toThrow(/url/);
+  });
 });
 
 describe('mergeManifests', () => {
