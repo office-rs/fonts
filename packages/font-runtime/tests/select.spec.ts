@@ -52,4 +52,25 @@ describe('IntervalSet', () => {
     s.addRanges([[5, 6]]);
     expect(s.contains(5)).toBe(true);
   });
+  it('merges overlapping ranges so contains stays sound', () => {
+    const s = IntervalSet.ofRanges([[1, 1000], [5, 10], [20, 30]]);
+    expect(s.contains(500)).toBe(true);
+    expect(s.contains(2)).toBe(true);
+    expect(s.contains(1001)).toBe(false);
+  });
+  it('merges adjacent ranges and handles out-of-order adds', () => {
+    const s = IntervalSet.ofRanges([[4, 6]]);
+    s.addRanges([[1, 3]]);          // adjacent -> merges to [1,6]
+    expect(s.contains(3)).toBe(true);
+    expect(s.contains(4)).toBe(true);
+    expect(s.contains(6)).toBe(true);
+    expect(s.contains(7)).toBe(false);
+  });
+  it('probes inclusive endpoints', () => {
+    const s = IntervalSet.ofRanges([[1, 3]]);
+    expect(s.contains(1)).toBe(true);
+    expect(s.contains(3)).toBe(true);
+    expect(s.contains(0)).toBe(false);
+    expect(s.contains(4)).toBe(false);
+  });
 });
