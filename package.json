@@ -1,0 +1,9 @@
+{
+  "name": "fonts-workspace",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "test": "npm run test -w @office-rs/font-runtime",
+    "build": "npm run build -w @office-rs/font-runtime"
+  }
+}
