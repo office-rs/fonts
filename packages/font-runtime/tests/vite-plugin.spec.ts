@@ -113,4 +113,40 @@ describe('rwordFonts vite plugin', () => {
       await server.close();
     }
   });
+
+  it('dev: virtual module URL takes the dev branch (middleware mount, not the build asset path)', { timeout: 60_000 }, async () => {
+    const server = await createServer({
+      root: fixtureProject(),
+      base: '/sub/',
+      configFile: false,
+      plugins: [rwordFonts({ families: ['fixture'] })],
+      // Pin IPv4 loopback: on Windows the default bind is IPv6-only, which
+      // refuses fetch() connections to 127.0.0.1.
+      server: { host: '127.0.0.1' },
+      logLevel: 'silent',
+    });
+    await server.listen(0);
+    try {
+      const port = (server.httpServer!.address() as { port: number }).port;
+      const origin = `http://127.0.0.1:${port}`;
+
+      // Fetch the transformed entry module through vite's dev pipeline, then
+      // follow its rewritten import to the virtual module — the dev branch of
+      // the plugin's load() is what produces the string there.
+      const entry = await fetch(`${origin}/sub/main.js`);
+      expect(entry.status).toBe(200);
+      const entryBody = await entry.text();
+      const virtualUrl = /from\s+"([^"]*virtual:rword-fonts[^"]*)"/.exec(entryBody)?.[1];
+      expect(virtualUrl).toBeDefined();
+
+      const virtual = await fetch(`${origin}${virtualUrl}`);
+      expect(virtual.status).toBe(200);
+      const virtualBody = await virtual.text();
+      expect(virtualBody).toContain('/sub/@rword-fonts/manifest.json');      // dev: middleware mount
+      expect(virtualBody).not.toContain('/sub/rword-fonts/manifest.json');  // NOT the build asset path
+      expect(virtualBody).toContain('fixture%400.0.1');                      // version cache-bust key
+    } finally {
+      await server.close();
+    }
+  });
 });
