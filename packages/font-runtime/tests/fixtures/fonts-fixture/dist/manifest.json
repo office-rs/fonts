@@ -1,0 +1,46 @@
+{
+ "version": 1,
+ "generated": "",
+ "families": {
+  "ff": {
+   "displayName": "Fixture Font",
+   "full": {
+    "url": "ff/full.woff2",
+    "format": "woff2",
+    "sha256": "0b539468ed42d75cd745806559a98006f397aa3994ec7631630a871645a3a134",
+    "bytes": 9
+   },
+   "slices": [
+    {
+     "url": "ff/common-0.woff2",
+     "format": "woff2",
+     "sha256": "ff05ada6465d1902796bffe586d06784367e0e8bc1e4a788d771ce0c420517dc",
+     "bytes": 13,
+     "id": "common-0",
+     "kind": "common",
+     "preload": true,
+     "codepoints": [
+      [
+       19968,
+       19968
+      ]
+     ]
+    },
+    {
+     "url": "ff/blk-0000.woff2",
+     "format": "woff2",
+     "sha256": "3e8ffa378d8d5881035096e3c4b5b29ebc4f71b0be9d9c37fc11c8d44e5902e2",
+     "bytes": 13,
+     "id": "blk-0000",
+     "kind": "block",
+     "codepoints": [
+      [
+       21248,
+       21503
+      ]
+     ]
+    }
+   ]
+  }
+ }
+}
