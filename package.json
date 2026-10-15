@@ -8,5 +8,6 @@
     "test": "npm run test -w @office-rs/font-runtime",
     "build": "npm run build -w @office-rs/font-runtime",
     "make:packages": "node tools/make-packages.mjs"
-  }
+  },
+  "version": "1.0.0"
 }

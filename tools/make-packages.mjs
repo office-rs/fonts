@@ -12,11 +12,21 @@ for (const key of Object.keys(manifest.families)) {
   rmSync(pkgDir, { recursive: true, force: true });
   mkdirSync(join(pkgDir, 'dist'), { recursive: true });
   cpSync(join(root, 'dist/v1', key), join(pkgDir, 'dist', key), { recursive: true });
+  // Noto fonts are OFL; the license must travel with the slices.
+  cpSync(join(root, 'sources/OFL.txt'), join(pkgDir, 'dist/OFL.txt'));
   // Copy only this family's files; manifest.json is per-family-filtered.
   const fam = { version: 1, generated: manifest.generated, families: { [key]: manifest.families[key] } };
   writeFileSync(join(pkgDir, 'dist/manifest.json'), JSON.stringify(fam));
   writeFileSync(join(pkgDir, 'package.json'), JSON.stringify({
-    name: `@office-rs/fonts-${key}`, version, private: false, files: ['dist'], sideEffects: false,
+    name: `@office-rs/fonts-${key}`,
+    version,
+    private: false,
+    description: `Sliced ${manifest.families[key].displayName} WOFF2 assets + manifest for @office-rs/font-runtime (on-demand web font loading)`,
+    license: 'OFL-1.1',
+    repository: { type: 'git', url: 'git+https://github.com/office-rs/fonts.git' },
+    publishConfig: { access: 'public' },
+    files: ['dist'],
+    sideEffects: false,
   }, null, 2) + '\n');
   console.log(`packaged @office-rs/fonts-${key}`);
 }

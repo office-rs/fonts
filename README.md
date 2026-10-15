@@ -32,7 +32,10 @@ manifests by family key (duplicate key = init error, never silent overwrite).
 ### Channel 1 — CDN (default, zero config)
 
 Manifest URLs are pinned to a major-version git tag (`v1`); upstream Noto
-upgrades re-slice under a new tag, old tags stay reproducible forever:
+upgrades re-slice under a new tag, old tags stay reproducible forever.
+Never re-point a published tag in place: jsDelivr caches tag content
+aggressively, so edits under an existing tag stay invisible to clients —
+ship fixes as a new tag (and a `dist/v<n>/` directory) instead:
 
 ```
 https://cdn.jsdelivr.net/gh/office-rs/fonts@v1/dist/v1/manifest.json

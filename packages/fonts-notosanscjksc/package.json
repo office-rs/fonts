@@ -1,7 +1,16 @@
 {
   "name": "@office-rs/fonts-notosanscjksc",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": false,
+  "description": "Sliced Noto Sans CJK SC WOFF2 assets + manifest for @office-rs/font-runtime (on-demand web font loading)",
+  "license": "OFL-1.1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/office-rs/fonts.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist"
   ],
