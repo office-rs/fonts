@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
-import { createFetcher, serveJobs } from '../src/fetcher';
+import { createFetcher, serveJobs, WORKER_BATCH_TIMEOUT_MS } from '../src/fetcher';
 import { createHash } from 'node:crypto';
 
 const woff2 = new Uint8Array(readFileSync('test-data/abc.woff2'));
@@ -40,6 +40,69 @@ describe('serveJobs', () => {
       if (results[0].ok) { expect(results[0].bytes[1]).toBe(0x01); }   // served (and decoded) by the fallback
       expect(latest?.terminated).toBe(true);   // the broken worker was torn down, not reused
     } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
+describe('WorkerFetcher stall belt', () => {
+  it('a silent worker batch (no message, no error) times out and recovers on the main thread', async () => {
+    // The rword-under-vite-dev hang class: the worker constructs and accepts
+    // the job, but neither onmessage nor onerror ever fires. Without a
+    // deadline the batch — and runEnsure behind it — hangs forever.
+    vi.useFakeTimers();
+    let latest: SilentWorker | null = null;
+    class SilentWorker {
+      onmessage: ((ev: MessageEvent) => void) | null = null;
+      onerror: ((ev: ErrorEvent) => void) | null = null;
+      terminated = false;
+      constructor(_scriptUrl: URL, _opts?: unknown) { latest = this; }
+      postMessage(_msg: unknown): void { /* silence — the stall */ }
+      terminate(): void { this.terminated = true; }
+    }
+    vi.stubGlobal('Worker', SilentWorker);
+    vi.stubGlobal('fetch', (async () => ({ arrayBuffer: async () => woff2.slice().buffer })) as unknown as typeof fetch);
+    try {
+      const batch = createFetcher().fetchBatch([{ url: 'http://x/abc.woff2', sha256: sha, format: 'woff2' }]);
+      vi.advanceTimersByTime(WORKER_BATCH_TIMEOUT_MS + 1);   // deadline passes → stall belt fires
+      const results = await batch;                           // recovered via the main-thread path
+      expect(results[0].ok).toBe(true);
+      if (results[0].ok) { expect(results[0].bytes[1]).toBe(0x01); }   // fetched + decoded by the fallback
+      expect(latest?.terminated).toBe(true);                 // the stalled worker was torn down, not reused
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+  it('a healthy worker batch does not hit the stall timeout', async () => {
+    vi.useFakeTimers();
+    let latest: ReplyWorker | null = null;
+    class ReplyWorker {
+      onmessage: ((ev: MessageEvent) => void) | null = null;
+      onerror: ((ev: ErrorEvent) => void) | null = null;
+      terminated = false;
+      constructor(_scriptUrl: URL, _opts?: unknown) { latest = this; }
+      postMessage(_msg: unknown): void {
+        queueMicrotask(() => this.onmessage?.({ data: { results: [
+          { url: 'http://x/abc.woff2', ok: true, bytes: woff2.slice() },
+        ] } } as MessageEvent));
+      }
+      terminate(): void { this.terminated = true; }
+    }
+    const fetched: string[] = [];
+    vi.stubGlobal('Worker', ReplyWorker);
+    vi.stubGlobal('fetch', (async (u: string) => {
+      fetched.push(u);   // must stay empty: the worker served this batch
+      return { arrayBuffer: async () => woff2.slice().buffer };
+    }) as unknown as typeof fetch);
+    try {
+      const results = await createFetcher().fetchBatch([{ url: 'http://x/abc.woff2', sha256: sha, format: 'woff2' }]);
+      expect(results[0].ok).toBe(true);
+      expect(fetched).toEqual([]);                           // worker path, no fallback
+      await vi.advanceTimersByTimeAsync(WORKER_BATCH_TIMEOUT_MS + 1);   // well past the deadline
+      expect(latest?.terminated).toBe(false);                // timeout was cleared; worker stays for reuse
+    } finally {
+      vi.useRealTimers();
       vi.unstubAllGlobals();
     }
   });

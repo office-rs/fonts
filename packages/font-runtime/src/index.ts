@@ -51,7 +51,18 @@ export class FontRuntime {
 
   async ready(): Promise<FontManifest> {
     if (this.merged) { return this.merged; }
-    const urls = [...(this.opts.includeDefaultNoto !== false ? [DEFAULT_NOTO_MANIFEST_URL] : []), ...this.opts.manifests];
+    // Manifest urls must be absolute before use: the vite plugin's virtual
+    // module emits root-relative urls ('/@rword-fonts/manifest.json?v=…') —
+    // Node fetch rejects those outright, and where fetch accepts them
+    // (browsers) resolveManifestUrls crashes on new URL(rel, rootRelative)
+    // because a root-relative string is an invalid URL base, silently sinking
+    // init into the legacy full-font fallback. Absolutize against the document
+    // base; in non-browser hosts (Node/vitest) there is no location, so the
+    // module url (a file:// url) stands in as the base. Absolute urls pass
+    // through URL resolution untouched.
+    const docBase = (globalThis as { location?: { href?: string } }).location?.href ?? import.meta.url;
+    const urls = [...(this.opts.includeDefaultNoto !== false ? [DEFAULT_NOTO_MANIFEST_URL] : []), ...this.opts.manifests]
+      .map((u) => new URL(u, docBase).href);
     const manifests: FontManifest[] = [];
     for (const url of urls) {
       const res = await fetch(url);

@@ -102,6 +102,28 @@ describe('FontRuntime', () => {
     expect(seen).toContain('http://x/fonts/f/common-0.otf');
     expect(seen).not.toContain('f/common-0.otf');
   });
+  it('ready() absolutizes root-relative manifest urls against the document base before fetching', async () => {
+    // The vite plugin's virtual module emits a root-relative manifest url
+    // ('/@rword-fonts/manifest.json?v=…'). Node's fetch rejects it outright,
+    // and where fetch does resolve it (browsers) resolveManifestUrls then
+    // crashes — a root-relative string is an invalid base for new URL(rel, u)
+    // — sinking init into the legacy full-font fallback. Non-browser hosts
+    // have no document location, so the module url (file:// under vitest) is
+    // the accepted base.
+    const s = await sha('slice-bytes');
+    const expected = new URL('/x/manifest.json', import.meta.url).href;
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL) => {
+      const u = String(url);
+      seen.push(u);
+      if (u !== expected) { return new Response('', { status: 404 }); }   // only the absolutized form serves
+      return new Response(JSON.stringify(manifestJson('F', 'f', s)), { headers: { 'content-type': 'application/json' } });
+    }));
+    const rt = new FontRuntime({ manifests: ['/x/manifest.json'], includeDefaultNoto: false });
+    const m = await rt.ready();   // must resolve; the bare '/x/…' form must never reach fetch
+    expect(Object.keys(m.families)).toContain('f');
+    expect(seen).toEqual([expected]);
+  });
   it('slice fetch error surfaces via onFontError', async () => {
     const s = await sha('slice-bytes');            // manifest sha of 'slice-bytes', but the slice URL serves 'garbage'
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {

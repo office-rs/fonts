@@ -23,6 +23,14 @@ export async function serveJobs(jobs: FetchJob[], fetchBytes: (url: string) => P
 export interface Fetcher { fetchBatch(jobs: FetchJob[]): Promise<FetchResult[]> }
 
 /**
+ * Stall deadline for one worker batch (ms), exported for tests. Some hosts
+ * (rword app under vite dev) load the worker and accept the job but never
+ * deliver a message OR error event — without a deadline the batch, and
+ * runEnsure behind it, hangs forever.
+ */
+export const WORKER_BATCH_TIMEOUT_MS = 15_000;
+
+/**
  * Worker-backed Fetcher (fetch + sha256 + woff2 decode off the main thread).
  * Serialization contract: callers must not overlap fetchBatch calls —
  * runEnsure awaits each batch before issuing the next, and the single
@@ -42,6 +50,21 @@ class WorkerFetcher implements Fetcher {
     }
     const w = this.worker;
     return new Promise((resolve) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const settle = (result: FetchResult[] | Promise<FetchResult[]>) => {
+        if (settled) { return; }
+        settled = true;
+        if (timer !== undefined) { clearTimeout(timer); }
+        resolve(result);
+      };
+      // Stall belt: same recovery shape as onerror below — terminate, drop the
+      // worker, and serve the batch on the main thread.
+      timer = setTimeout(() => {
+        this.worker = null;
+        w.terminate();
+        settle(this.mainThread(jobs));
+      }, WORKER_BATCH_TIMEOUT_MS);
       // Construction can succeed while loading fails later (404 on the script,
       // module resolution error, crash before the first postMessage): onmessage
       // then never fires, so onerror must settle the pending batch via the
@@ -49,9 +72,9 @@ class WorkerFetcher implements Fetcher {
       w.onerror = () => {
         this.worker = null;
         w.terminate();
-        resolve(this.mainThread(jobs));
+        settle(this.mainThread(jobs));
       };
-      w.onmessage = (ev: MessageEvent<{ results: FetchResult[] }>) => { resolve(ev.data.results); };
+      w.onmessage = (ev: MessageEvent<{ results: FetchResult[] }>) => { settle(ev.data.results); };
       w.postMessage({ jobs });
     });
   }
