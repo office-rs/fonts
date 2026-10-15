@@ -1,44 +1,38 @@
-// WOFF2 -> TTF decode via wawoff2, lazily instantiated on first woff2 slice.
+// WOFF2 -> TTF decode via `woff2-encoder`, lazily imported on the first woff2
+// slice. We import the decompress-only subpath: its wasm is base64-embedded
+// inside the ES module (no side-car asset to keep reachable), works
+// identically on the main thread and inside workers, and measures ~296 KB
+// minified — the full `wawoff2` entry shipped both bindings at 1.24 MB.
+//
+// Why not `wawoff2` (the previous decoder): it never worked in a browser.
+// Its wrapper does `const m = require('./build/decompress_binding.js');
+// m.onRuntimeInitialized = resolve` — but the emscripten binding assigns
+// `module.exports = Module` only inside its Node-only branch, so a browser
+// bundler executes the wasm init yet hands the importer an EMPTY object; the
+// resolve callback is written to a detached husk and the init promise never
+// settles (Rword.init hung forever). Node exercised the Node branch, which
+// is why unit tests stayed green. `woff2-encoder` is ESM-first and its
+// decompress returns a fresh exact-size Uint8Array per call (covered by a
+// test in decode.spec.ts), so no defensive copy on our side.
 import type { SliceFormat } from './manifest';
-
-/**
- * Minimal typed surface of the `wawoff2` package (v2 ships no type
- * declarations). It is a CommonJS emscripten build: `require('wawoff2')`
- * yields `{ compress, decompress }`, and `decompress(buffer)` is itself an
- * async function that awaits the wasm runtime initialization before its
- * first real call — so memoizing the function reference is all the lazy
- * initialization we need on this side.
- */
-interface Wawoff2Module {
-  compress: (data: Uint8Array) => Promise<Uint8Array>;
-  decompress: (data: Uint8Array) => Promise<Uint8Array>;
-}
 
 type Decompress = (data: Uint8Array) => Promise<Uint8Array>;
 
 let decompress: Decompress | null = null;
 
-async function loadWawoff2(): Promise<Decompress> {
+async function loadDecompress(): Promise<Decompress> {
   if (decompress) { return decompress; }
-  // Node ESM-CJS interop may expose the exports either directly on the
-  // namespace or nested under `default`; accept both shapes.
-  // @ts-expect-error wawoff2 ships no type declarations; shape validated below.
-  const raw = (await import('wawoff2')) as unknown as Partial<Wawoff2Module> & { default?: Partial<Wawoff2Module> };
-  const fn = raw.decompress ?? raw.default?.decompress;
+  const mod = await import('woff2-encoder/decompress');
+  const fn = mod.default;
   if (typeof fn !== 'function') {
-    throw new Error('wawoff2: expected a `decompress` export, none found');
+    throw new Error('woff2-encoder/decompress: expected a default-exported function, none found');
   }
-  decompress = async (data: Uint8Array) => {
-    const out = await fn(data);
-    // The emscripten binding can return a view into the wasm heap; copy it
-    // so the result stays valid regardless of later calls.
-    return new Uint8Array(out);
-  };
+  decompress = fn;
   return decompress;
 }
 
 export async function decodeIfNeeded(bytes: Uint8Array, format: SliceFormat): Promise<Uint8Array> {
   if (format === 'otf') { return bytes; }
-  const fn = await loadWawoff2();
+  const fn = await loadDecompress();
   return fn(bytes);
 }

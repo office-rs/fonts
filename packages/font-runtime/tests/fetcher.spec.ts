@@ -64,8 +64,14 @@ describe('WorkerFetcher stall belt', () => {
     vi.stubGlobal('fetch', (async () => ({ arrayBuffer: async () => woff2.slice().buffer })) as unknown as typeof fetch);
     try {
       const batch = createFetcher().fetchBatch([{ url: 'http://x/abc.woff2', sha256: sha, format: 'woff2' }]);
-      vi.advanceTimersByTime(WORKER_BATCH_TIMEOUT_MS + 1);   // deadline passes → stall belt fires
-      const results = await batch;                           // recovered via the main-thread path
+      vi.advanceTimersByTime(WORKER_BATCH_TIMEOUT_MS + 1);   // deadline passes → stall belt fires (worker torn down, fallback started)
+      // Fake timers have done their job (the deadline). The recovery chain
+      // still needs real loop turns — crypto.subtle.digest resolves off a
+      // libuv thread AND woff2-encoder's wrapper yields through a real
+      // setTimeout(0) before each wasm call — so restore real timers and let
+      // the fallback settle naturally.
+      vi.useRealTimers();
+      const results = await batch;   // recovered via the main-thread path
       expect(results[0].ok).toBe(true);
       if (results[0].ok) { expect(results[0].bytes[1]).toBe(0x01); }   // fetched + decoded by the fallback
       expect(latest?.terminated).toBe(true);                 // the stalled worker was torn down, not reused
