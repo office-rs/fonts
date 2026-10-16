@@ -37,6 +37,22 @@ describe('selectInitial', () => {
     const plan = selectInitial(m, [19968], [], { preloadCommon: true });
     expect(plan.families.some((f) => f.family === 'serif')).toBe(false);
   });
+  it('preloadCommon=true activates unreferenced families carrying preload slices (self-sliced hosts)', () => {
+    // A host's own sliced manifest (e.g. commercial fonts) merges families the
+    // document never references; their `preload: true` common slices must load
+    // for blank documents too, not just the hard-coded Noto defaults.
+    const m = fixture();
+    m.families.simsun = { displayName: 'SimSun',
+      full: { url: 'x/sim-full.woff2', format: 'woff2', sha256: 'a'.repeat(64), bytes: 900 },
+      slices: [ ({ id: 'common-0', kind: 'common', preload: true, url: 'x/sim-common-0.woff2', format: 'woff2' as const, sha256: 'a'.repeat(64), bytes: 90, codepoints: [[19968, 19970]] }) ] };
+    const plan = selectInitial(m, [], [], { preloadCommon: true });
+    const simsun = plan.families.find((f) => f.family === 'simsun')!;
+    expect(simsun.load).toBe('slices');
+    expect(simsun.sliceIds).toEqual(['common-0']);
+    // And with preloadCommon=false the family stays inactive (covering only).
+    const off = selectInitial(m, [], [], { preloadCommon: false });
+    expect(off.families.some((f) => f.family === 'simsun')).toBe(false);
+  });
   it('short-circuits to full when selected bytes exceed 80% of full', () => {
     const plan = selectInitial(fixture(), [19968, 20000, 30000, 31000], ['Noto Sans CJK SC'], { preloadCommon: true });
     // 4 slices x100 = 400 > 320 (80% of 400) → full

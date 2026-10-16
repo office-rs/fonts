@@ -13,6 +13,14 @@ export function selectInitial(
   const byName = new Map<string, string>();
   for (const [key, fam] of Object.entries(manifest.families)) { byName.set(fam.displayName, key); }
   const active = new Set<string>(DEFAULT_FAMILY_KEYS);
+  // preloadCommon's documented semantics are data-driven, not Noto-specific:
+  // any family carrying `preload: true` slices (self-sliced hosts merge their
+  // own commercial manifests) preloads them for blank documents too.
+  if (opts.preloadCommon) {
+    for (const [key, fam] of Object.entries(manifest.families)) {
+      if (fam.slices?.some((s) => s.preload === true)) { active.add(key); }
+    }
+  }
   for (const name of families) { const key = byName.get(name); if (key) { active.add(key); } }
   const plans: FamilyPlan[] = [];
   for (const key of active) {
