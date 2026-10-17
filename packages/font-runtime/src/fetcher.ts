@@ -1,6 +1,6 @@
 // Shared job logic + main-thread Worker client with graceful fallback.
-import { decodeIfNeeded } from './decode';
-import type { SliceFormat } from './manifest';
+import { decodeIfNeeded } from './decode.js';
+import type { SliceFormat } from './manifest.js';
 
 export interface FetchJob { url: string; sha256: string; format: SliceFormat; }
 export type FetchResult = { url: string; ok: true; bytes: Uint8Array } | { url: string; ok: false; error: string };

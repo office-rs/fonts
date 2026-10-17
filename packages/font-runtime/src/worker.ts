@@ -1,5 +1,5 @@
 // FontWorker body: fetch + sha256 + woff2 decode, posts results with transferables.
-import { serveJobs, type FetchJob, type FetchResult } from './fetcher';
+import { serveJobs, type FetchJob, type FetchResult } from './fetcher.js';
 
 self.onmessage = async (ev: MessageEvent<{ jobs: FetchJob[] }>) => {
   const results = await serveJobs(ev.data.jobs, async (url) => new Uint8Array(await (await fetch(url)).arrayBuffer()));

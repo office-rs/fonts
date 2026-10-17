@@ -5,10 +5,10 @@
 // hash matched — re-hashing here would compare decoded TTF bytes against the
 // woff2-file digest and reject every woff2 slice by construction.
 
-import type { FontManifest, FontSliceRef } from './manifest';
-import type { FontSlicePlan } from './select';
-import type { Fetcher } from './fetcher';
-import { FontLoadError } from './errors';
+import type { FontManifest, FontSliceRef } from './manifest.js';
+import type { FontSlicePlan } from './select.js';
+import type { Fetcher } from './fetcher.js';
+import { FontLoadError } from './errors.js';
 
 export interface EnsureState { loaded: Set<string>; failed: Set<string>; inflight: Set<string>; }
 

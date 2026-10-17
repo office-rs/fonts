@@ -14,7 +14,7 @@
 // is why unit tests stayed green. `woff2-encoder` is ESM-first and its
 // decompress returns a fresh exact-size Uint8Array per call (covered by a
 // test in decode.spec.ts), so no defensive copy on our side.
-import type { SliceFormat } from './manifest';
+import type { SliceFormat } from './manifest.js';
 
 type Decompress = (data: Uint8Array) => Promise<Uint8Array>;
 

@@ -1,4 +1,4 @@
-import type { FontManifest, FontSliceRef } from './manifest';
+import type { FontManifest, FontSliceRef } from './manifest.js';
 
 export interface FamilyPlan { family: string; load: 'slices' | 'full' | 'whole'; sliceIds: string[]; }
 export interface FontSlicePlan { families: FamilyPlan[]; }

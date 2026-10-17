@@ -1,10 +1,10 @@
 // FontRuntime facade: manifest merge + selection + ensure + typing watcher (spec section 7).
-import { mergeManifests, parseManifest, type FontManifest, type FontFamily, type FontFileRef, type FontSliceRef } from './manifest';
-import { selectInitial, type FontSlicePlan } from './select';
-import { createEnsureState, runEnsure, FULL_SLICE_ID, WHOLE_SLICE_ID, type EnsureState } from './ensure';
-import { createFetcher, type Fetcher } from './fetcher';
-import { FontLoadError } from './errors';
-import { IntervalSet } from './coverage';
+import { mergeManifests, parseManifest, type FontManifest, type FontFamily, type FontFileRef, type FontSliceRef } from './manifest.js';
+import { selectInitial, type FontSlicePlan } from './select.js';
+import { createEnsureState, runEnsure, FULL_SLICE_ID, WHOLE_SLICE_ID, type EnsureState } from './ensure.js';
+import { createFetcher, type Fetcher } from './fetcher.js';
+import { FontLoadError } from './errors.js';
+import { IntervalSet } from './coverage.js';
 
 export const DEFAULT_NOTO_MANIFEST_URL = 'https://cdn.jsdelivr.net/gh/office-rs/fonts@v1/dist/v1/manifest.json';
 
@@ -129,6 +129,6 @@ export class FontRuntime {
     return this.merged;
   }
 }
-export { FontLoadError } from './errors';
-export type { FontManifest, FontSliceRef, SliceFormat } from './manifest';
-export type { FontSlicePlan, FamilyPlan } from './select';
+export { FontLoadError } from './errors.js';
+export type { FontManifest, FontSliceRef, SliceFormat } from './manifest.js';
+export type { FontSlicePlan, FamilyPlan } from './select.js';
