@@ -7,3 +7,4 @@ examples/vite/package-lock.json
 # font-runtime build output is never committed; the fonts-* asset packages'
 # dist/ dirs ARE committed, so this pattern must not widen to packages/*/dist/
 packages/font-runtime/dist/
+.npmrc
