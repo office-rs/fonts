@@ -17,12 +17,16 @@
     {
      "url": "notosanscjksc/common-0.woff2",
      "format": "woff2",
-     "sha256": "b809751331b6f725fd59fc08c50882d6de0953349a124364c20b0080a39007cb",
-     "bytes": 223488,
+     "sha256": "fd688a8c9ee920c5953cd91779769f501555c5a21e384a620a41d3891f3502c4",
+     "bytes": 232916,
      "id": "common-0",
      "kind": "common",
      "preload": true,
      "codepoints": [
+      [
+       32,
+       126
+      ],
       [
        19968,
        19968
@@ -30728,12 +30732,16 @@
     {
      "url": "notoserifcjksc/common-0.woff2",
      "format": "woff2",
-     "sha256": "ee3b52a94a94fe13b3e1953c5296f75488e9b1a1ec09045048a819e2cc240a05",
-     "bytes": 309536,
+     "sha256": "d0d7da7ac22039f5fd81ec4ef578b227e5115ed5efacb7432aab596a0c163fe8",
+     "bytes": 324004,
      "id": "common-0",
      "kind": "common",
      "preload": true,
      "codepoints": [
+      [
+       32,
+       126
+      ],
       [
        19968,
        19968
