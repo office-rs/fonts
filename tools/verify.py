@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Integrity gate for a sliced dist tree (spec 6.5): files parse, hashes/sizes match,
-codepoint union equals the source cmap (CJK region), budgets hold."""
+codepoint union equals the source cmap (CJK region + common-0's preloaded family
+ASCII), budgets hold."""
 import argparse, hashlib, json, sys
 from pathlib import Path
 from fontTools.ttLib import TTFont
 
 BUDGETS = {"common": 1_000_000, "block": 300_000}
 CJK_START = 0x2E80  # must mirror slice.py: sliced coverage is the CJK region
+ASCII_LO, ASCII_HI = 0x20, 0x7E  # must mirror slice.py: common-0 preloads family ASCII
 
 def fail(msg: str) -> None:
     print(f"verify: {msg}", file=sys.stderr); sys.exit(1)
@@ -46,10 +48,16 @@ def main() -> None:
                 seen.update(range(lo, hi + 1))
             TTFont(root / s["url"])  # parses (woff2 needs brotli installed)
         if args.sources and fam.get("slices"):
-            src = TTFont(find_source(Path(args.sources), key))
-            src_cjk = {cp for cp in src.getBestCmap() if cp >= CJK_START}
-            if seen != src_cjk:
-                missing = len(src_cjk - seen)
+            src_path = find_source(Path(args.sources), key)
+            # collections: verify against face 0 (slice.py's default --face-index;
+            # the manifest does not record the face a family was cut from)
+            src = TTFont(src_path, fontNumber=0) if src_path.suffix.lower() == ".ttc" \
+                else TTFont(src_path)
+            src_cps = set(src.getBestCmap())
+            expected = ({cp for cp in src_cps if cp >= CJK_START}
+                        | {cp for cp in src_cps if ASCII_LO <= cp <= ASCII_HI})
+            if seen != expected:
+                missing = len(expected - seen)
                 fail(f"{key} coverage mismatch, missing {missing} codepoints")
     print("verify: ok")
 

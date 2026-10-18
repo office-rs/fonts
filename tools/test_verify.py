@@ -16,6 +16,23 @@ def test_verify_passes_on_fresh_slice(tmp_path):
                         "--sources", str(REPO / "sources")], capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
 
+def test_verify_passes_on_fresh_cjk_slice(tmp_path):
+    # Exercises the CJK coverage path of the gate: the slice union must equal
+    # the source cmap's CJK region PLUS common-0's preloaded family ASCII.
+    # Runs against a tiny pre-subset CJK source (fast); `--sources` points
+    # at its dir so find_source matches notosanscjksc-tiny.otf.
+    from _testutil import make_tiny_cjk_font
+    tiny = make_tiny_cjk_font(tmp_path / "notosanscjksc-tiny.otf")
+    out = tmp_path / "d"
+    subprocess.run([sys.executable, str(REPO / "tools/slice.py"),
+                    "--input", str(tiny),
+                    "--key", "notosanscjksc", "--freq", str(REPO / "tools/freq/junda.txt"),
+                    "--common-count", "2", "--common-per-slice", "200",
+                    "--block-size", "100", "--out", str(out)], check=True)
+    r = subprocess.run([sys.executable, str(REPO / "tools/verify.py"), str(out / "manifest.json"),
+                        "--sources", str(tmp_path)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+
 def test_verify_catches_corrupt_sha(tmp_path):
     out = tmp_path / "d"
     subprocess.run([sys.executable, str(REPO / "tools/slice.py"),

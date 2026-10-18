@@ -2,8 +2,13 @@
 """Slice a font into codepoint-range WOFF2 subsets + manifest.json (spec 6.2).
 
 Common slices: frequency-clustered (top-N chars from a freq table, present in cmap).
+common-0 (the preload slice) additionally carries the family's own ASCII
+(cmap-present U+0020-007E): a run whose resolved font slots all name the CJK
+family must shape its digits/Latin from the family itself, not from the global
+fallback chain ("bold digits" bug, 2026-10-18).
 Block slices: remaining CJK codepoints (>= CJK_START) chunked into fixed-size ranges.
-Latin codepoints (< CJK_START) are NOT sliced here — the Latin family ships whole.
+Latin codepoints outside ASCII (< CJK_START, > 0x7E) are NOT sliced here — the
+Latin family ships whole.
 """
 import argparse
 import hashlib
@@ -15,6 +20,7 @@ from fontTools import subset
 from fontTools.ttLib import TTFont
 
 CJK_START = 0x2E80  # CJK radicals onwards; Latin/punct stays in the whole Latin font
+ASCII_LO, ASCII_HI = 0x20, 0x7E  # preloaded into common-0 (see module docstring)
 
 
 def load_cmap(path: str, face_index: int) -> set[int]:
@@ -25,9 +31,9 @@ def load_cmap(path: str, face_index: int) -> set[int]:
 def load_freq(path: str | None, cmap: set[int]) -> list[int]:
     """Frequency-ordered codepoints from a `char\tcount` table.
 
-    Only chars present in the cmap AND in the CJK region are kept — without the
-    CJK_START floor, ASCII letters from the freq list would leak into common
-    slices and break the CJK-only coverage contract.
+    Only chars present in the cmap AND in the CJK region are kept — commons
+    stay CJK-only; the family's ASCII reaches common-0 only through the
+    explicit preload merge in main(), never from the freq table.
     """
     if not path:
         return []
@@ -122,9 +128,15 @@ def main() -> None:
     else:
         freq = load_freq(args.freq, cmap)
         commons = freq[: args.common_count * args.common_per_slice]
+        # common-0 preloads the family's own ASCII: a run whose resolved font
+        # slots all name this family shapes ASCII digits/Latin from here, not
+        # from the global fallback chain ("bold digits" bug, 2026-10-18).
+        ascii_preload = sorted(cp for cp in cmap if ASCII_LO <= cp <= ASCII_HI)
         slices = []
         for i in range(args.common_count):
             chunk = commons[i * args.common_per_slice:(i + 1) * args.common_per_slice]
+            if i == 0 and ascii_preload:
+                chunk = sorted(set(chunk) | set(ascii_preload))
             if not chunk:
                 break
             rel = f"common-{i}{ext(flavor)}"
