@@ -1,6 +1,6 @@
 {
   "name": "@office-rs/fonts-notoserifcjksc",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": false,
   "description": "Sliced Noto Serif CJK SC WOFF2 assets + manifest for @office-rs/font-runtime (on-demand web font loading)",
   "license": "OFL-1.1",
